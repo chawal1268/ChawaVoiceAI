@@ -28,3 +28,8 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+## ChawaVoice product architecture
+
+- Keep the account-free studio's drafts and recent projects on the current device; do not add Cloud database ownership or pretend local browser voices are hosted TTS, because the owner requested no account creation and has not supplied an audio engine.
+- Keep long-text chunking and duration calculations in a browser-safe shared library, independently testable from the studio UI.
