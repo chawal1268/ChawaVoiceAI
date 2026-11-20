@@ -24,7 +24,8 @@ export function AudioStudio() {
   const [videoDuration, setVideoDuration] = useState(0);
   const [segmentTimes, setSegmentTimes] = useState<number[]>([]);
   const [compareText, setCompareText] = useState("A clareza está nos detalhes.");
-  const [compareVoiceIds, setCompareVoiceIds] = useState<string[]>(["detective", "narrador", "conversador"]);
+  const [compareVoiceIds, setCompareVoiceIds] = useState<string[]>([]);
+  const [selectedBrowserVoiceName, setSelectedBrowserVoiceName] = useState("");
   const [engineVoices, setEngineVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [supportedVoices, setSupportedVoices] = useState<Set<string>>(new Set());
   const [compareOpen, setCompareOpen] = useState(false);
@@ -44,6 +45,8 @@ export function AudioStudio() {
         const browserVoices = window.speechSynthesis.getVoices();
         setEngineVoices(browserVoices);
         setSupportedVoices(new Set(browserVoices.map((voice) => voice.lang.toLowerCase())));
+        setSelectedBrowserVoiceName((name) => name || browserVoices[0]?.name || "");
+        setCompareVoiceIds((current) => current.length ? current : browserVoices.slice(0, 3).map((voice) => `${voice.name}::${voice.lang}`));
       };
       loadVoices();
       window.speechSynthesis.addEventListener("voiceschanged", loadVoices);
@@ -59,14 +62,11 @@ export function AudioStudio() {
   const chunks = useMemo(() => splitTextIntoChunks(text), [text]);
   const selected = voices.find((voice) => voice.id === voiceId) ?? voices[0];
   const filtered = voices.filter((voice) => (language === "Todos" || voice.language === language) && (gender === "Todos" || voice.gender === gender));
-  const activeVoices = voices.filter((voice) => {
-    const sourceAvailable = voice.available && engineVoices.some((entry) => entry.lang.toLowerCase() === voice.browserLocale.toLowerCase());
-    const browserAvailable = supportedVoices.has(voice.browserLocale.toLowerCase());
-    return sourceAvailable || browserAvailable;
-  });
-  const selectedBrowserVoice = engineVoices.find((voice) => voice.lang.toLowerCase() === selected.browserLocale.toLowerCase());
-  const hasRealDistinctVoice = Boolean(selected.available && selectedBrowserVoice);
-  const validCompareIds = compareVoiceIds.filter((id) => activeVoices.some((voice) => voice.id === id));
+  const matchesLocale = (browserVoice: SpeechSynthesisVoice, locale: string) => browserVoice.lang.toLowerCase().replaceAll("_", "-").startsWith(locale.toLowerCase());
+  const filteredBrowserVoices = engineVoices.filter((voice) => language === "Todos" || (language === "Português · Portugal" && matchesLocale(voice, "pt-pt")) || (language === "Português · Brasil" && matchesLocale(voice, "pt-br")) || (language === "Inglês" && matchesLocale(voice, "en")) || (language === "Espanhol" && matchesLocale(voice, "es")) || (language === "Francês" && matchesLocale(voice, "fr")));
+  const selectedBrowserVoice = engineVoices.find((voice) => voice.name === selectedBrowserVoiceName) ?? filteredBrowserVoices[0];
+  const selectedProfileBrowserVoice = engineVoices.find((voice) => matchesLocale(voice, selected.browserLocale));
+  const validCompareVoices = compareVoiceIds.map((id) => engineVoices.find((voice) => `${voice.name}::${voice.lang}` === id)).filter((voice): voice is SpeechSynthesisVoice => Boolean(voice));
   const segments = useMemo(() => splitTextIntoChunks(text, 380), [text]);
 
   useEffect(() => {
@@ -76,16 +76,14 @@ export function AudioStudio() {
     setSegmentTimes(words.map((count) => Number(((count / total) * base).toFixed(1))));
   }, [segments, videoDuration, target]);
 
-  const playPreview = (content: string, voice = selected) => {
+  const playPreview = (content: string, voice: SpeechSynthesisVoice) => {
     if (!("speechSynthesis" in window)) { toast.error("Este navegador não tem pré-escuta de voz."); return; }
-    const browserVoice = engineVoices.find((entry) => entry.lang.toLowerCase() === voice.browserLocale.toLowerCase());
-    if (!browserVoice) { toast.error(`Não foi encontrada uma voz ${voice.language} neste navegador. Este perfil requer um motor de voz ligado.`); return; }
     window.speechSynthesis.cancel();
     const parts = splitTextIntoChunks(content, 260);
     parts.forEach((part, index) => {
       const utterance = new SpeechSynthesisUtterance(part);
-      utterance.voice = browserVoice;
-      utterance.lang = voice.browserLocale;
+      utterance.voice = voice;
+      utterance.lang = voice.lang;
       utterance.rate = Math.min(estimate.effectiveRate, 1.35) * settings.rate;
       utterance.pitch = settings.pitch;
       utterance.volume = settings.volume;
@@ -126,7 +124,7 @@ export function AudioStudio() {
     toast.success("Modo Mentalista selecionado. A pré-escuta exige uma voz portuguesa neste navegador.");
   };
 
-  const addCompareVoice = (id: string) => setCompareVoiceIds((old) => old.includes(id) ? old : [...old, id].slice(-4));
+  const toggleCompareVoice = (id: string) => setCompareVoiceIds((old) => old.includes(id) ? old.filter((voiceId) => voiceId !== id) : [...old, id].slice(-4));
 
   return <div className={`app-shell ${theme === "light" ? "theme-light" : ""}`}><div className="studio-layout">
     <aside className="studio-sidebar"><div className="brand-lockup"><div className="brand-mark"><AudioLines size={20}/></div><div><div className="brand-name">ChawaVoice AI</div><div className="brand-caption">Estúdio de narração</div></div></div>
